@@ -3,25 +3,24 @@ import praw
 import pdb
 import re
 import os
-from config_bot import *
+from wrex_config import *
 
-# Check that the file that contains our username exists
-if not os.path.isfile("config_bot.py"):
-    print "You must create a config file with your username and password."
-    print "Please see config_skel.py"
+# Verify that config file is present in current directory
+if not os.path.isfile("wrex_config.py"):
+    print "Config file not found in current directory."
     exit(1)
 
-# Create the Reddit instance
-r = praw.Reddit(user_agent=config_bot.USER_AGENT)
+# Create Reddit object
+r = praw.Reddit(user_agent=USER_AGENT)
 
-# and login
+# Login with credentials from config file
 r.login(REDDIT_USERNAME, REDDIT_PASS)
 
-# Have we run this code before? If not, create an empty list
+# If file with replied to comments does not exist, then create empty array to store them in
 if not os.path.isfile("wrex_bot_comments_replied_to.txt"):
     comments_replied_to = []
 
-# If we have run the code before, load the list of posts we have replied to
+# otherwise, load replied to comments from existing file
 else:
     # Read the file into a list and remove any empty values
     with open("wrex_bot_comments_replied_to.txt", "r") as f:
@@ -29,23 +28,29 @@ else:
         comments_replied_to = comments_replied_to.split("\n")
         comments_replied_to = filter(None, comments_replied_to)
 
-# Get the top 15 values from our subreddit
-subreddit = r.get_subreddit('KevinBotTest')
-#for comment in praw.helpers.comment_stream(r, 'KevinBotTest', limit = 100, verbosity = 0):
-for comment in subreddit.get_comments():
-    print "checking comment " + comment.id
-    # If we haven't replied to this comment before
-    if comment.id not in comments_replied_to:
-        # Do a case insensitive search
-        if re.search("^Wrex\.?$", comment.body, re.IGNORECASE):
-            # Reply to the post
-            comment.reply("Shepard.")
-            print "Bot replying to : ", comment.id
+# Designate working subreddit to search through
+subreddit = r.get_subreddit('all')
 
-            # Store the current id into our list
-            comments_replied_to.append(comment.id)
-
-# Write our updated list back to the file
+# Super basic error handling for now.  Only exists so that if something goes wrong in the middle
+# of running, comments that were replied to are still recorded
+try:
+    # Gets all recent comments in subreddit
+    for comment in subreddit.get_comments(limit=None):
+        print "checking comment " + comment.id
+        # If this comment has not already been replied to by this bot
+        if comment.id not in comments_replied_to:
+            # Use regex to see if the body of the comment is 'Wrex' or 'Wrex.'  (case insensitive)
+            if re.search("^Wrex\.?$", comment.body, re.IGNORECASE):
+                # Reply with 'Shepard.'
+                comment.reply("Shepard.")
+                print "Bot replying to : ", comment.id
+    
+                # Add replied to comment to our array of comments
+                comments_replied_to.append(comment.id)
+except:
+    print "Unexpected Error"
+    
+# Rewrite the text file containing comments that the bot has replied to
 with open("wrex_bot_comments_replied_to.txt", "w") as f:
     for comment_id in comments_replied_to:
         f.write(comment_id + "\n")
