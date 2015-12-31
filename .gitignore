@@ -57,6 +57,5 @@ docs/_build/
 target/
 
 #specific files
-config_bot.py
-config_bot.pyc
+*_config.py
 wrex_bot_comments_replied_to.txt
