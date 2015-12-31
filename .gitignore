@@ -55,3 +55,8 @@ docs/_build/
 
 # PyBuilder
 target/
+
+#specific files
+*_config.py
+*_comments_replied_to.txt
+*_submissions_replied_to.txt
