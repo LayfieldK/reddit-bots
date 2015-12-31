@@ -55,3 +55,8 @@ docs/_build/
 
 # PyBuilder
 target/
+
+#specific files
+config_bot.py
+config_bot.pyc
+wrex_bot_comments_replied_to.txt
