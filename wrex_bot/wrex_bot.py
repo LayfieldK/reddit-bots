@@ -12,6 +12,7 @@ def get_date(comment):
     time = comment.created
     return datetime.datetime.fromtimestamp(time)
 
+
 # Verify that config file is present in current directory
 if not os.path.isfile("wrex_config.py"):
     print "Config file not found in current directory."

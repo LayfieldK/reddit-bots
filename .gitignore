@@ -58,5 +58,5 @@ target/
 
 #specific files
 *_config.py
-wrex_config.py
-wrex_bot_comments_replied_to.txt
+*_comments_replied_to.txt
+*_submissions_replied_to.txt
