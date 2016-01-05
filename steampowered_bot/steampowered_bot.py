@@ -8,6 +8,7 @@ import time
 import traceback
 import urllib
 import urllib2
+import sqlite3
 from bs4 import BeautifulSoup
 from steampowered_config import *
 
@@ -70,6 +71,8 @@ r = praw.Reddit(user_agent=USER_AGENT)
 # Login with credentials from config file
 r.login(REDDIT_USERNAME, REDDIT_PASS)
 
+db = SqliteDatabase('steampowered.db')
+
 # If file with replied to comments does not exist, then create empty array to store them in
 if not os.path.isfile("steampowered_bot_comments_replied_to.txt"):
     comments_replied_to = []
@@ -92,79 +95,103 @@ try:
     # Gets all recent comments in subreddit
     for comment in subreddit.get_comments(limit=None):
         print "checking comment " + comment.id
-        if get_date(comment) > datetime.datetime.now() + datetime.timedelta(minutes=-1):
         # If this comment has not already been replied to by this bot
-            if comment.id not in comments_replied_to:
-                regexSerch = re.search("http://store\.steampowered\.com/app/.*/", comment.body, re.IGNORECASE)
-                if regexSerch:
-                    url = regexSerch.group(0)
-                    html = urllib2.urlopen(url) 
-                    bsObj = BeautifulSoup( html.read())
+            
+        if comment.id not in comments_replied_to:
+            
+            regexSerch = re.search("http://store\.steampowered\.com/app/.*/", comment.body, re.IGNORECASE)
+            if regexSerch:
+                print "match"
+                url = regexSerch.group(0)
+                html = urllib2.urlopen(url) 
+                bsObj = BeautifulSoup( html.read())
+                
+                title_obj = bsObj.find("div", class_="apphub_AppName")
+                title = title_obj.text.strip()
+                print title_obj.text.strip()
+                
+                game_desc_obj = bsObj.find("div", class_="game_description_snippet")
+                game_desc = game_desc_obj.text.strip()
+                print game_desc_obj.text.strip()
+                
+                details_block = bsObj.find("div", class_="details_block")
+                
+                
+                
+                for br in details_block.findAll('br'):
+                    br.extract()
+                
+                genrePattern = re.compile(r'Genre:')
+                genre = details_block.find('b', text=genrePattern).find_next_sibling().text.strip()
+                print details_block.find('b', text=genrePattern).find_next_sibling().text.strip()
+                
+                devPattern = re.compile(r'Developer:')
+                developer = details_block.find('b', text=devPattern).find_next_sibling().text.strip()
+                print details_block.find('b', text=devPattern).find_next_sibling().text.strip()
+                
+                pubPattern = re.compile(r'Publisher:')
+                publisher = details_block.find('b', text=pubPattern).find_next_sibling().text.strip()
+                print details_block.find('b', text=pubPattern).find_next_sibling().text.strip()
+                
+                releaseDatePattern = re.compile(r'Release Date:')
+                release_date = details_block.find('b', text=releaseDatePattern).next_sibling.strip()
+                print release_date
+                
+                game_review_summary_obj = bsObj.find("span", class_="game_review_summary")
+                game_review_summary = game_review_summary_obj.text.strip()
+                print game_review_summary_obj.text.strip()
+                
+                glance_ctn = bsObj.find("div",class_="glance_ctn_responsive_left")
+                game_review_stats = glance_ctn.div["data-store-tooltip"].strip()
+                print glance_ctn.div["data-store-tooltip"].strip()
+                
+                tag_objects = bsObj.find("div", class_="glance_tags popular_tags").find_all("a")
+                tags = []
+                                
+                for tag_object in tag_objects:
+                    tags.append(tag_object.text.strip())
+                
                     
-                    title_obj = bsObj.find("div", class_="apphub_AppName")
-                    title = title_obj.text.strip()
-                    print title_obj.text.strip()
+                price_section = bsObj.find("div", class_="game_purchase_action")
+                current_price = ""
+                original_price = ""
+                discount_percentage = ""
+                if price_section.find("div", class_="game_purchase_price"):
+                    current_price = price_section.find("div", class_="game_purchase_price").text.strip()
+                elif price_section.find("div", class_="discount_original_price"):
+                    current_price = price_section.find("div", class_="discount_final_price").text.strip()
+                    original_price = price_section.find("div", class_="discount_original_price").text.strip()
+                    discount_percentage = price_section.find("div", class_="discount_pct").text.strip().replace("-","")
+                else :
+                    current_price = "N/A"
+                
+                print "Bot replying to : ", comment.id
+                
+                reply =  "|||\n"
+                reply += "|:--|:--|\n"
+                reply += "|Name|" + title + "|\n"
+                reply += "|Description|" + game_desc + "|\n"
+                reply += "|Price|" 
+                
+                if discount_percentage == "" :
+                    reply += current_price + "|\n"
+                else :
+                    reply += original_price + "  -  " + discount_percentage + "  =  " + current_price + "|\n"
                     
-                    game_desc_obj = bsObj.find("div", class_="game_description_snippet")
-                    game_desc = game_desc_obj.text.strip()
-                    print game_desc_obj.text.strip()
+                reply += "|Steam Reviews|" + game_review_summary + " - " + game_review_stats + "|\n"
+                reply += "|Popular Tags|"
+                
+                reply += ", ".join(tags)
                     
-                    details_block = bsObj.find("div", class_="details_block")
-                    
-                    
-                    
-                    for br in details_block.findAll('br'):
-                        br.extract()
-                    
-                    genrePattern = re.compile(r'Genre:')
-                    genre = details_block.find('b', text=genrePattern).find_next_sibling().text.strip()
-                    print details_block.find('b', text=genrePattern).find_next_sibling().text.strip()
-                    
-                    devPattern = re.compile(r'Developer:')
-                    developer = details_block.find('b', text=devPattern).find_next_sibling().text.strip()
-                    print details_block.find('b', text=devPattern).find_next_sibling().text.strip()
-                    
-                    pubPattern = re.compile(r'Publisher:')
-                    publisher = details_block.find('b', text=pubPattern).find_next_sibling().text.strip()
-                    print details_block.find('b', text=pubPattern).find_next_sibling().text.strip()
-                    
-                    releaseDatePattern = re.compile("\w\w\w \d?\d, \d\d\d\d")
-                    release_date = releaseDatePattern.search(details_block.get_text()).group()
-                    print release_date
-                    
-                    game_review_summary_obj = bsObj.find("span", class_="game_review_summary")
-                    game_review_summary = game_review_summary_obj.text.strip()
-                    print game_review_summary_obj.text.strip()
-                    
-                    glance_ctn = bsObj.find("div",class_="glance_ctn_responsive_left")
-                    game_review_stats = glance_ctn.div["data-store-tooltip"].strip()
-                    print glance_ctn.div["data-store-tooltip"].strip()
-                    
-                    tag_objects = bsObj.find("div", class_="glance_tags popular_tags").find_all("a")
-                    for tag in tag_objects:
-                        print tag.text.strip()
-                    
-                    print "Bot replying to : ", comment.id
-                    
-                    reply =  "|||\n"
-                    reply += "|:--|:--|\n"
-                    reply += "|Name|" + title + "|\n"
-                    reply += "|Description|" + game_desc + "|\n"
-                    reply += "|Popular Tags|"
-                    
-                    for tag in tag_objects:
-                        reply += tag.text.strip() + ", "
-                        
-                    reply += "|\n"
-                    reply += "|Steam Reviews|" + game_review_summary + " - " + game_review_stats + "|\n"
-                    reply += "|Developer|" + developer + "|\n"
-                    reply += "|Publisher|" + publisher + "|\n"
-                    reply += "Release Date|" + release_date + "|\n"
-                    
-                    comment.reply(reply)
-        
-                    # Add replied to comment to our array of comments
-                    #comments_replied_to.append(comment.id)
+                reply += "|\n"
+                reply += "|Developer|" + developer + "|\n"
+                reply += "|Publisher|" + publisher + "|\n"
+                reply += "|Release Date|" + release_date + "|\n"
+                
+                comment.reply(reply)
+    
+                # Add replied to comment to our array of comments
+                #comments_replied_to.append(comment.id)
 except Exception as e:
     traceback.print_exc()
     print str(e)
