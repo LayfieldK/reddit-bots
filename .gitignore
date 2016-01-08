@@ -59,6 +59,9 @@ target/
 # Databases
 *.db
 
+# Log files
+*.log
+
 #specific files
 *_config.py
 *_comments_replied_to.txt
