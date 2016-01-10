@@ -1,5 +1,6 @@
 #!/usr/bin/python
 import praw
+from prawoauth2 import PrawOAuth2Mini
 import pdb
 import re
 import os
@@ -33,21 +34,36 @@ if not os.path.isfile("steampowered_config.py"):
     exit(1)
 
 db = SqliteDatabase('steampowered.db')
-comments_replied_to=[]  
+comments_replied_to=[] 
 
 # Create Reddit object
 r = praw.Reddit(user_agent=USER_AGENT)
 
 # Login with credentials from config file
-r.login(REDDIT_USERNAME, REDDIT_PASS)
+#r.login(REDDIT_USERNAME, REDDIT_PASS)
+try:
+    oauth_helper = PrawOAuth2Mini(r, app_key=APPKEY,
+                              app_secret=APPSECRET, access_token=ACCESSTOKEN,
+                              scopes=SCOPES, refresh_token=REFRESHTOKEN) 
+except praw.errors.OAuthInvalidToken:
+    logger.warn("Invalid OAuth Token.")
+    refresh_oauth() 
 
 subreddit = r.get_subreddit('KevinBotTest')
+
+def refresh_oauth():
+    logger.info("Attempting to refresh refresh token.")
+    oauth_helper.refresh()
+    logger.info("Token refreshed.")
+    oauth_helper = PrawOAuth2Mini(r, app_key=APPKEY,
+                              app_secret=APPSECRET, access_token=ACCESSTOKEN,
+                              scopes=SCOPES, refresh_token=REFRESHTOKEN) 
 
 def initialize_db():
     logger.info("db connecting")
     db.connect()
     try:
-        db.create_tables([reply, comment_reply, submission_reply, banned_user])
+        db.create_tables([reply, reply_steamapp, comment_reply, submission_reply, banned_user])
         logger.info("db opened")
     except OperationalError:
         # Table already exists. Do nothing
@@ -62,6 +78,12 @@ class reply(Model):
     date_of_reply = DateTimeField()
     user = CharField()
     subreddit = CharField()
+    
+    class Meta:
+        database = db
+
+class reply_steamapp(Model):
+    reply = ForeignKeyField(reply, related_name='reply_steamapps')
     steamapp_id = CharField()
     
     class Meta:
@@ -74,6 +96,19 @@ class comment_reply(Model):
     class Meta:
         database = db
 
+class submission_reply(Model):
+    reply = ForeignKeyField(reply, related_name='submission_replies')
+    submission_id = CharField()
+    
+    class Meta:
+        database = db
+        
+class banned_user(Model):
+    username = CharField()
+    
+    class Meta:
+        database = db
+  
 def is_already_replied(comment_id):
     if comment_id in comments_replied_to:
         return True
@@ -97,26 +132,11 @@ def has_reached_postlimit():
     else:
         return False
 
-    
-class submission_reply(Model):
-    reply = ForeignKeyField(reply, related_name='submission_replies')
-    submission_id = CharField()
-    
-    class Meta:
-        database = db
-        
-class banned_user(Model):
-    username = CharField()
-    
-    class Meta:
-        database = db
-  
 def get_steamapp_ids(comment_body):
     # receives goodreads url
     # returns the id using regex
-    regex = "http://store\.steampowered\.com/app/(.*?)/"
-    return set(re.findall(regex, comment_body))
-
+    regex = "http://store\.steampowered\.com/app/(.*?)[/\s\.\?]"
+    return re.findall(regex, comment_body)
 
 def get_steamapp_details(steamapp_id):
     logger.info("getting details for steamapp %s", steamapp_id)
@@ -181,12 +201,21 @@ def get_steamapp_details(steamapp_id):
         
     
     game_review_summary_obj = bsObj.find("span", class_="game_review_summary")
-    steamapp_data['game_review_summary'] = game_review_summary_obj.get_text().strip()
+    if game_review_summary_obj:
+        steamapp_data['game_review_summary'] = game_review_summary_obj.get_text().strip()
     
     glance_ctn = bsObj.find("div",class_="glance_ctn_responsive_left")
-    steamapp_data['game_review_stats'] = glance_ctn.div["data-store-tooltip"].strip()
+    if glance_ctn:
+        glance_ctn_divs = bsObj.find_all("div")
+        for div in glance_ctn_divs:
+            if div.has_attr("data-store-tooltip"):
+                steamapp_data['game_review_stats'] = div["data-store-tooltip"]
+                break
     
-    tag_objects = bsObj.find("div", class_="glance_tags popular_tags").find_all("a")
+    tags_root = bsObj.find("div", class_="glance_tags popular_tags")
+    tag_objects=[]
+    if tags_root:
+        tag_objects = tags_root.find_all("a")
     tags = []
                     
     for tag_object in tag_objects:
@@ -198,20 +227,23 @@ def get_steamapp_details(steamapp_id):
     steamapp_data['current_price'] = ""
     steamapp_data['original_price'] = ""
     steamapp_data['discount_percentage'] = ""
-    if price_section.find("div", class_="game_purchase_price"):
-        steamapp_data['current_price'] = price_section.find("div", class_="game_purchase_price").get_text().strip()
-    elif price_section.find("div", class_="discount_original_price"):
-        steamapp_data['current_price'] = price_section.find("div", class_="discount_final_price").get_text().strip()
-        steamapp_data['original_price'] = price_section.find("div", class_="discount_original_price").get_text().strip()
-        steamapp_data['discount_percentage'] = price_section.find("div", class_="discount_pct").get_text().strip().replace("-","")
-    else :
+    if price_section:
+        if price_section.find("div", class_="game_purchase_price"):
+            steamapp_data['current_price'] = price_section.find("div", class_="game_purchase_price").get_text().strip()
+        elif price_section.find("div", class_="discount_original_price"):
+            steamapp_data['current_price'] = price_section.find("div", class_="discount_final_price").get_text().strip()
+            steamapp_data['original_price'] = price_section.find("div", class_="discount_original_price").get_text().strip()
+            steamapp_data['discount_percentage'] = price_section.find("div", class_="discount_pct").get_text().strip().replace("-","")
+        else :
+            steamapp_data['current_price'] = "N/A"
+    else:
         steamapp_data['current_price'] = "N/A"
     return steamapp_data
 
 def add_steamapp_details_to_reply(reply_text,steamapp_data):
     reply_text +=  "|||\n"
     reply_text += "|:--|:--|\n"
-    reply_text += "|**Name**|" + steamapp_data['title'] + "|\n"
+    reply_text += "|**Name**|**" + steamapp_data['title'] + "**|\n"
     if "game_desc" in steamapp_data:
         reply_text += "|**Description**|" + steamapp_data['game_desc'] + "|\n"
     if "genre" in steamapp_data:
@@ -246,22 +278,33 @@ def process_reply_to_comment(comment):
     logger.info("Bot replying to : %s", comment.id)              
     steamapps = get_steamapp_ids(comment.body)
     reply_text = ""
+    steamapp_index = 0
     for steamapp in steamapps:
-        steamapp_data = get_steamapp_details(steamapp)
-        reply_text = add_steamapp_details_to_reply(reply_text,steamapp_data)
+        if steamapp_index < 10:
+            steamapp_data = get_steamapp_details(steamapp)
+            reply_text = add_steamapp_details_to_reply(reply_text,steamapp_data)
+            steamapp_index+=1
+        else:
+            break
     
     reply_text += "^^I ^^am ^^a ^^bot ^^created ^^for ^^fun. ^^Send ^^comments, ^^suggestions, ^^and ^^other ^^feedback ^^to ^^" + CREATOR_USER_PAGE + "."    
-    post_reply_to_comment(comment,reply_text,steamapp)    
+    post_reply_to_comment(comment,reply_text,steamapps)    
     logger.info("comment %s replied to", comment.id)
     
-def post_reply_to_comment(comment,reply_text,steamapp_id):
+def post_reply_to_comment(comment,reply_text,steamapp_ids):
     comment.reply(reply_text)
+    update_db_with_reply(comment,steamapp_ids)
     
+    
+def update_db_with_reply(comment, steamapp_ids):
     reply_data = reply(user=comment.author,
                        date_of_reply=datetime.datetime.utcnow(),
-                       subreddit=comment.submission.subreddit,
-                       steamapp_id=steamapp_id)
+                       subreddit=comment.submission.subreddit)
     reply_data.save()
+    
+    for steamapp_id in steamapp_ids:
+        reply_steamapp_data = reply_steamapp(reply=reply_data,steamapp_id=steamapp_id)
+        reply_steamapp_data.save()
     
     comment_replied_to = comment_reply(reply=reply_data,
                                        comment_id=comment.id)
@@ -269,35 +312,40 @@ def post_reply_to_comment(comment,reply_text,steamapp_id):
     comments_replied_to.append(comment.id)
 
 def main():
-        
-    # Designate working subreddit to search through
-    
     continueLoop = True
-    #while continueLoop:
-    # Super basic error handling for now.  Only exists so that if something goes wrong in the middle
-    # of running, comments that were replied to are still recorded
-    try:
-        # Gets all recent comments in subreddit
-        for comment in subreddit.get_comments(limit=None):
-            logger.info("checking comment %s", comment.id)
-            # If this comment has not already been replied to by this bot
-            if not has_reached_postlimit():  
-                if not is_already_replied(comment.id):
-                    #if comment.author != None and comment.author.name != "steampowered_bot":
-                    if comment.author != None and not is_banned_user(comment.author):
-                        if "store.steampowered.com/app" in comment.body:
-                            process_reply_to_comment(comment)       
+    while continueLoop:
+        # Super basic error handling for now.  Only exists so that if something goes wrong in the middle
+        # of running, comments that were replied to are still recorded
+        try:
+            # Gets all recent comments in subreddit
+            for comment in praw.helpers.comment_stream(r,subreddit=SUBREDDIT,limit=None,verbosity=0):
+                logger.info("checking comment %s", comment.id)
+                # If this comment has not already been replied to by this bot
+                if not has_reached_postlimit():  
+                    if not is_already_replied(comment.id):
+                        #if comment.author != None and comment.author.name != "steampowered_bot":
+                        if comment.author != None and not is_banned_user(comment.author):
+                            if "store.steampowered.com/app" in comment.body:
+                                process_reply_to_comment(comment)       
+                    else:
+                        logger.info("comment %s already replied to", comment.id)
                 else:
-                    logger.info("comment %s already replied to", comment.id)
-            else:
-                logger.info("reached post limit, ignoring comments")
-    except Exception as e:
-        traceback.print_exc()
-        print str(e)
-        continueLoop = False
-        logger.error(str(e))
+                    logger.info("reached post limit, ignoring comments")
+        except praw.errors.OAuthInvalidToken:
+            logger.warn("Invalid OAuth Token.")
+            refresh_oauth() 
+        except KeyboardInterrupt:
+            deinit()
+            raise
+        except Exception as e:
+            traceback.print_exc()
+            print str(e)
+            #continueLoop = False
+            logger.error(str(e))
             
+
 initialize_db()
 main()
 deinit()
+
         
