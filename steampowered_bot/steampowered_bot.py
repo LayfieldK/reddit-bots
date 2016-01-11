@@ -131,6 +131,10 @@ def has_reached_postlimit():
         return True
     else:
         return False
+    
+def get_date(comment):
+    time = comment.created
+    return datetime.datetime.fromtimestamp(time)
 
 def get_steamapp_ids(comment_body):
     # receives goodreads url
@@ -153,7 +157,8 @@ def get_steamapp_details(steamapp_id):
     steamapp_data['title'] = title_obj.get_text().strip()
         
     game_desc_obj = bsObj.find("div", class_="game_description_snippet")
-    steamapp_data['game_desc'] = game_desc_obj.get_text().strip()
+    if game_desc_obj:
+        steamapp_data['game_desc'] = game_desc_obj.get_text().strip()
     
     details_block = bsObj.find("div", class_="details_block")
 
@@ -187,7 +192,7 @@ def get_steamapp_details(steamapp_id):
     runtime_pattern = re.compile(r'Running Time:')
     runtime_label = details_block.find('b', text=runtime_pattern)
     if runtime_label:
-        steamapp_data['running_time'] = runtime_label.find_next_sibling().get_text().strip()
+        steamapp_data['running_time'] = runtime_label.next_sibling.strip()
         
     production_pattern = re.compile(r'Production:')
     production_label = details_block.find('b', text=production_pattern)
@@ -319,18 +324,28 @@ def main():
         try:
             # Gets all recent comments in subreddit
             for comment in praw.helpers.comment_stream(r,subreddit=SUBREDDIT,limit=None,verbosity=0):
-                logger.info("checking comment %s", comment.id)
-                # If this comment has not already been replied to by this bot
-                if not has_reached_postlimit():  
-                    if not is_already_replied(comment.id):
-                        #if comment.author != None and comment.author.name != "steampowered_bot":
-                        if comment.author != None and not is_banned_user(comment.author):
-                            if "store.steampowered.com/app" in comment.body:
-                                process_reply_to_comment(comment)       
+                try:
+                    logger.info("checking comment %s", comment.id)
+                    # If this comment has not already been replied to by this bot
+                    if not has_reached_postlimit():  
+                        if not is_already_replied(comment.id):
+                            if comment.author != None and comment.author.name != REDDIT_USERNAME:
+                                if get_date(comment) > datetime.datetime.now() + datetime.timedelta(days=-1):
+                                    if "store.steampowered.com/app" in comment.body:
+                                        process_reply_to_comment(comment) 
+                                else:
+                                    logger.info("comment %s older than a day", comment.id)      
+                        else:
+                            logger.info("comment %s already replied to", comment.id)
                     else:
-                        logger.info("comment %s already replied to", comment.id)
-                else:
-                    logger.info("reached post limit, ignoring comments")
+                        logger.info("reached post limit, ignoring comments")
+                except praw.errors.OAuthInvalidToken:
+                    logger.warn("Invalid OAuth Token.")
+                    refresh_oauth() 
+                except Exception as e:
+                    traceback.print_exc()
+                    print str(e)
+                    logger.error(str(e))
         except praw.errors.OAuthInvalidToken:
             logger.warn("Invalid OAuth Token.")
             refresh_oauth() 
