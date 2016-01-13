@@ -49,7 +49,7 @@ except praw.errors.OAuthInvalidToken:
     logger.warn("Invalid OAuth Token.")
     refresh_oauth() 
 
-subreddit = r.get_subreddit('KevinBotTest')
+subreddit = r.get_subreddit(SUBREDDIT)
 
 def refresh_oauth():
     logger.info("Attempting to refresh refresh token.")
@@ -325,7 +325,7 @@ def main():
             # Gets all recent comments in subreddit
             for comment in praw.helpers.comment_stream(r,subreddit=SUBREDDIT,limit=None,verbosity=0):
                 try:
-                    logger.info("checking comment %s", comment.id)
+                    #logger.info("checking comment %s", comment.id)
                     # If this comment has not already been replied to by this bot
                     if not has_reached_postlimit():  
                         if not is_already_replied(comment.id):
