@@ -62,6 +62,7 @@ def refresh_oauth():
 def initialize_db():
     logger.info("db connecting")
     db.connect()
+    logger.info("db connected")
     try:
         db.create_tables([reply, reply_steamapp, comment_reply, submission_reply, banned_user])
         logger.info("db opened")
@@ -137,8 +138,8 @@ def get_date(comment):
     return datetime.datetime.fromtimestamp(time)
 
 def get_steamapp_ids(comment_body):
-    # receives goodreads url
     # returns the id using regex
+    logger.error("locating steamapps in comment")
     regex = "http://store\.steampowered\.com/app/(.*?)[/\s\.\?]"
     return re.findall(regex, comment_body)
 
@@ -297,11 +298,13 @@ def process_reply_to_comment(comment):
     logger.info("comment %s replied to", comment.id)
     
 def post_reply_to_comment(comment,reply_text,steamapp_ids):
+    logger.error("posting reply")
     comment.reply(reply_text)
     update_db_with_reply(comment,steamapp_ids)
     
     
 def update_db_with_reply(comment, steamapp_ids):
+    logger.info("Updating database with reply")
     reply_data = reply(user=comment.author,
                        date_of_reply=datetime.datetime.utcnow(),
                        subreddit=comment.submission.subreddit)
@@ -319,13 +322,11 @@ def update_db_with_reply(comment, steamapp_ids):
 def main():
     continueLoop = True
     while continueLoop:
-        # Super basic error handling for now.  Only exists so that if something goes wrong in the middle
-        # of running, comments that were replied to are still recorded
         try:
-            # Gets all recent comments in subreddit
+            logger.info("grabbing comment stream")
             for comment in praw.helpers.comment_stream(r,subreddit=SUBREDDIT,limit=None,verbosity=0):
                 try:
-                    #logger.info("checking comment %s", comment.id)
+                    logger.info("checking comment %s", comment.id)
                     # If this comment has not already been replied to by this bot
                     if not has_reached_postlimit():  
                         if not is_already_replied(comment.id):
@@ -334,7 +335,9 @@ def main():
                                     if "store.steampowered.com/app" in comment.body:
                                         process_reply_to_comment(comment) 
                                 else:
-                                    logger.info("comment %s older than a day", comment.id)      
+                                    logger.info("comment %s older than a day", comment.id)   
+                            else:
+                                logger.info("comment ignored due to bad author")   
                         else:
                             logger.info("comment %s already replied to", comment.id)
                     else:
@@ -343,8 +346,8 @@ def main():
                     logger.warn("Invalid OAuth Token.")
                     refresh_oauth() 
                 except Exception as e:
+                    logger.error("begin generic exception handling")
                     traceback.print_exc()
-                    print str(e)
                     logger.error(str(e))
         except praw.errors.OAuthInvalidToken:
             logger.warn("Invalid OAuth Token.")
@@ -353,8 +356,8 @@ def main():
             deinit()
             raise
         except Exception as e:
+            logger.error("begin generic exception handling")
             traceback.print_exc()
-            print str(e)
             #continueLoop = False
             logger.error(str(e))
             
