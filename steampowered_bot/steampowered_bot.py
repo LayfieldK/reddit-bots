@@ -138,7 +138,6 @@ def get_date(comment):
     return datetime.datetime.fromtimestamp(time)
 
 def get_steamapp_ids(comment_body):
-    # returns the id using regex
     logger.error("locating steamapps in comment")
     regex = "http://store\.steampowered\.com/app/(.*?)[/\s\.\?]"
     return re.findall(regex, comment_body)
@@ -284,18 +283,22 @@ def process_reply_to_comment(comment):
     logger.info("Bot replying to : %s", comment.id)              
     steamapps = get_steamapp_ids(comment.body)
     reply_text = ""
-    steamapp_index = 0
-    for steamapp in steamapps:
-        if steamapp_index < 10:
-            steamapp_data = get_steamapp_details(steamapp)
-            reply_text = add_steamapp_details_to_reply(reply_text,steamapp_data)
-            steamapp_index+=1
-        else:
-            break
+    #steamapp_index = 0
+    if len(steamapps) == 1:
+        
+        
+    #for steamapp in steamapps:
+    #    if steamapp_index < 10:
+        steamapp = steamapps[0]
+        steamapp_data = get_steamapp_details(steamapp)
+        reply_text = add_steamapp_details_to_reply(reply_text,steamapp_data)
+    #    steamapp_index+=1
+    #    else:
+    #        break
     
-    reply_text += "^^I ^^am ^^a ^^bot ^^created ^^for ^^fun. ^^Send ^^comments, ^^suggestions, ^^and ^^other ^^feedback ^^to ^^" + CREATOR_USER_PAGE + "."    
-    post_reply_to_comment(comment,reply_text,steamapps)    
-    logger.info("comment %s replied to", comment.id)
+        #reply_text += "^^I ^^am ^^a ^^bot ^^created ^^for ^^fun. ^^Send ^^comments, ^^suggestions, ^^and ^^other ^^feedback ^^to ^^" + CREATOR_USER_PAGE + "."    
+        post_reply_to_comment(comment,reply_text,steamapps)    
+        logger.info("comment %s replied to", comment.id)
     
 def post_reply_to_comment(comment,reply_text,steamapp_ids):
     logger.error("posting reply")
@@ -326,7 +329,7 @@ def main():
             logger.info("grabbing comment stream")
             for comment in praw.helpers.comment_stream(r,subreddit=SUBREDDIT,limit=None,verbosity=0):
                 try:
-                    logger.info("checking comment %s", comment.id)
+                    #logger.info("checking comment %s", comment.id)
                     # If this comment has not already been replied to by this bot
                     if not has_reached_postlimit():  
                         if not is_already_replied(comment.id):
@@ -348,7 +351,7 @@ def main():
                 except Exception as e:
                     logger.error("begin generic exception handling")
                     traceback.print_exc()
-                    logger.error(str(e))
+                    logger.error(repr(e))
         except praw.errors.OAuthInvalidToken:
             logger.warn("Invalid OAuth Token.")
             refresh_oauth() 
@@ -359,7 +362,7 @@ def main():
             logger.error("begin generic exception handling")
             traceback.print_exc()
             #continueLoop = False
-            logger.error(str(e))
+            logger.error(repr(e))
             
 
 initialize_db()
