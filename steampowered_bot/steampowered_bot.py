@@ -285,8 +285,7 @@ def process_reply_to_comment(comment):
     reply_text = ""
     #steamapp_index = 0
     if len(steamapps) == 1:
-        
-        
+   
     #for steamapp in steamapps:
     #    if steamapp_index < 10:
         steamapp = steamapps[0]
@@ -329,8 +328,6 @@ def main():
             logger.info("grabbing comment stream")
             for comment in praw.helpers.comment_stream(r,subreddit=SUBREDDIT,limit=None,verbosity=0):
                 try:
-                    #logger.info("checking comment %s", comment.id)
-                    # If this comment has not already been replied to by this bot
                     if not has_reached_postlimit():  
                         if not is_already_replied(comment.id):
                             if comment.author != None and comment.author.name != REDDIT_USERNAME:
