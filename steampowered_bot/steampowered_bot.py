@@ -146,6 +146,8 @@ def get_steamapp_details(steamapp_id):
     logger.info("getting details for steamapp %s", steamapp_id)
     
     steamapp_data = {}
+    
+    steamapp_data['app_id'] = steamapp_id
     url = "http://store.steampowered.com/app/" + steamapp_id
     
     opener = urllib2.build_opener()
@@ -248,7 +250,7 @@ def get_steamapp_details(steamapp_id):
 def add_steamapp_details_to_reply(reply_text,steamapp_data):
     reply_text +=  "|||\n"
     reply_text += "|:--|:--|\n"
-    reply_text += "|**Name**|**" + steamapp_data['title'] + "**|\n"
+    reply_text += "|**Name**|**" + steamapp_data['title'] + " - [SteamSpy Link](http://www.steamspy.com/app/" + steamapp_data['app_id'] + ")**|\n"
     if "game_desc" in steamapp_data:
         reply_text += "|**Description**|" + steamapp_data['game_desc'] + "|\n"
     if "genre" in steamapp_data:
@@ -258,9 +260,10 @@ def add_steamapp_details_to_reply(reply_text,steamapp_data):
     reply_text += "|**Price**|" 
     
     if steamapp_data['discount_percentage'] == "" :
-        reply_text += steamapp_data['current_price'] + "|\n"
+        reply_text += steamapp_data['current_price']
     else :
-        reply_text += "~~" + steamapp_data['original_price'] + "~~  -  " + steamapp_data['discount_percentage'] + "  =  **" + steamapp_data['current_price'] + "**|\n"
+        reply_text += "~~" + steamapp_data['original_price'] + "~~  -  " + steamapp_data['discount_percentage'] + "  =  **" + steamapp_data['current_price'] + "**"
+    reply_text += "  [SteamPrices link for other currencies](https://www.steamprices.com/us/app/" + steamapp_data['app_id'] + ")|\n"
     
     if "game_review_summary" in steamapp_data:    
         reply_text += "|**Steam Reviews**|" + steamapp_data['game_review_summary'] + " - " + steamapp_data['game_review_stats'] + "|\n"
